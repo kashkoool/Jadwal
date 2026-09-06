@@ -78,6 +78,16 @@ jobs:
       - name: npm audit (production deps, allowlist-aware)
         run: node scripts/audit-gate.mjs apps/api apps/web
 
+      # The migrations image synthesizes its own package.json and installs it
+      # with `npm install`, NOT `npm ci` against the monorepo lockfile - so the
+      # root `overrides` never reach it. On 2026-09-06 that let a patched
+      # mysql2 regress in that image only: Trivy failed, the fail-closed deploy
+      # gate SKIPPED migrate/deploy/smoke, and production silently served an
+      # 11-day-old build while main and CI both looked green. This asserts the
+      # two override lists cannot drift apart again.
+      - name: Migrations-image override drift
+        run: node scripts/check-migrations-overrides.mjs
+
   # ─── Stage 3: Secret Detection ──────────────────────────────────
   secrets:
     name: Secret Detection
