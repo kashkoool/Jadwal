@@ -65,8 +65,17 @@ describe('ActivitySpecialPricesManager — draft + collapsible (create wizard)',
     const user = userEvent.setup();
     const onChange = jest.fn();
     // Seed an override in NEXT month so the day is always future + clickable.
-    const d = new Date();
-    d.setUTCMonth(d.getUTCMonth() + 1);
+    // Build the month with Date.UTC rather than setUTCMonth(+1): setUTCMonth
+    // keeps the day-of-month, so on a 31st whose next month is shorter it
+    // overflows into the month AFTER next (2026-08-31 -> "Sept 31" -> Oct 1).
+    // The test only clicks "next" once, so it would land on September while the
+    // override sat in October, the priced day would never render, and there
+    // would be no Remove button. That fired on 7 calendar days a year
+    // (Jan 29-31, Mar 31, May 31, Aug 31, Oct 31) and turned every open PR red.
+    // Date.UTC normalises a month index of 12 into January of the next year,
+    // and day 15 exists in every month, so this can never pick the wrong month.
+    const now = new Date();
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 15));
     const seeded = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-15`;
     renderManager(<ActivitySpecialPricesManager draft value={[{ date: seeded, price: 120 }]} onChange={onChange} />);
 
