@@ -6,9 +6,20 @@ on:
   push:
     branches: [main]
   schedule:
-    # Weekly full scan on Monday 06:00 UTC — catches newly-disclosed CVEs
-    # even on code that hasn't changed.
-    - cron: "0 6 * * 1"
+    # DAILY, not weekly. The intent was always to catch newly-disclosed CVEs
+    # on code that has not changed - but advisories are published every day, so
+    # a weekly cadence leaves up to 7 days of blindness.
+    #
+    # Not hypothetical: on 2026-09-06 five HIGH production advisories
+    # (fast-uri x4, mysql2) were found by a PR, not by this scan. They were
+    # published AFTER the 08-31 Monday run, so this workflow would not have
+    # looked again until 09-07. main had not been pushed since 08-26, so no
+    # PR-triggered audit ran either, and production sat 11 days stale behind a
+    # fail-closed deploy gate nobody knew had tripped.
+    #
+    # A green badge means "green as of the last run", never "green today".
+    # Daily is what keeps that gap small enough to matter.
+    - cron: "0 6 * * *"
 
 permissions:
   contents: read
