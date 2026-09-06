@@ -24,7 +24,7 @@ import { ReferenceDataCacheService } from '../redis/reference-data-cache.service
 import { SessionDenylistService } from '../redis/session-denylist.service';
 import { assertHourlyTimesConsistent } from '../common/validators/hourly-activity';
 import { nowInTimezone } from '../common/validators/timezone';
-import { refundCouponUsage } from '../bookings/bookings.service';
+import { refundCouponUsage, addMonthsClamped } from '../bookings/bookings.service';
 import { envNumber } from '../common/env';
 
 @Injectable()
@@ -3166,8 +3166,7 @@ export class AdminService {
   // ─── Dashboard Charts Data ────────────────────────────────────
   async getDashboardCharts() {
     const db = this.prisma.client;
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const sixMonthsAgo = addMonthsClamped(new Date(), -6);
 
     const [revenueData, bookingsByCategory, vendorGrowth] = await Promise.all([
       db.payment.findMany({

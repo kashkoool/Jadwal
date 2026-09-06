@@ -4,6 +4,7 @@ import { useMemo, useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { addMonthsClampedLocal } from '@/lib/date-window';
 
 /* ─── Types ───────────────────────────────────────────────── */
 
@@ -319,8 +320,7 @@ export default function BookingCalendar({
   const canGoBack = month > currentMonth;
 
   // Can't go beyond the max advance window (customer-facing: 6 months)
-  const maxDate = new Date();
-  maxDate.setMonth(maxDate.getMonth() + maxAdvanceMonths);
+  const maxDate = addMonthsClampedLocal(new Date(), maxAdvanceMonths);
   const maxMonth = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}`;
   const canGoForward = rightMonth < maxMonth;
 
