@@ -638,4 +638,98 @@ jobs:
           fi
           echo "All ECS services have healthy targets — deploy verified."
 
+
+  # ─── Failure alarm ────────────────────────────────────────────────
+  # A fail-closed gate that fails SILENTLY is only half a control: it
+  # correctly refuses to ship a bad image, then lets everyone believe it
+  # shipped. On 2026-09-06 the Trivy gate did exactly that — it blocked a
+  # vulnerable migrations image (correct), migrate/deploy/smoke were skipped
+  # (correct), and nothing told anyone (not correct). main claimed the fix was
+  # live while production served an 11-day-old build, and it surfaced only
+  # because somebody went and read ECS by hand.
+  #
+  # `if: failure()` fires when a needed job FAILED. Skipped jobs do not count
+  # as failures, so this depends on every job in the pipeline.
+  notify-failure:
+    name: Deploy failure alert
+    runs-on: ubuntu-latest
+    needs: [build-api, build-web, build-migrations, trivy, migrate, deploy, smoke]
+    if: failure()
+    permissions:
+      contents: read
+      issues: write        # the only extra grant, scoped to this job alone
+    steps:
+      - name: Open a deploy-failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          BODY=$(cat <<EOF
+          The deploy workflow failed, so **production was NOT updated**.
+
+          - commit: \`${SHA}\`
+          - run: ${RUN_URL}
+
+          The gates here are fail-closed: when a build or a Trivy scan fails,
+          \`migrate\` / \`deploy\` / \`smoke\` are **skipped** rather than run. That is
+          the correct behaviour — but it means **main can look green and merged
+          while production keeps serving the previous build**.
+
+          Do not assume a later merge fixes this. Verify at the platform:
+
+          \`\`\`sh
+          aws ecs describe-services --cluster jadwal-prod \\
+            --services jadwal-api jadwal-web \\
+            --query 'services[].{n:serviceName,td:taskDefinition,r:deployments[0].rolloutState,f:deployments[0].failedTasks}'
+          \`\`\`
+
+          A **new task-definition revision**, \`rolloutState: COMPLETED\` and
+          \`failedTasks: 0\` is what "shipped" means. A green pipeline is not.
+
+          _Closes automatically on the next successful deploy._
+          EOF
+          )
+
+          # One rolling issue rather than one per failed run — a pile of
+          # duplicates is its own kind of silence.
+          EXISTING=$(gh issue list --label deploy-failure --state open --json number --jq '.[0].number // empty')
+          if [ -n "${EXISTING}" ]; then
+            gh issue comment "${EXISTING}" --body "${BODY}"
+            echo "commented on existing issue #${EXISTING}"
+          else
+            gh label create deploy-failure --color B60205 \
+              --description "Deploy failed; production did not update" 2>/dev/null || true
+            gh issue create --title "Deploy failed — production did NOT update (${SHA})" \
+              --body "${BODY}" --label deploy-failure
+          fi
+
+  # ─── Failure alarm: stand down ────────────────────────────────────
+  # Closes the rolling issue once a deploy genuinely succeeds end-to-end, so an
+  # OPEN deploy-failure issue always means "production is behind right now"
+  # rather than "something went wrong at some point".
+  notify-recovered:
+    name: Close deploy-failure issue
+    runs-on: ubuntu-latest
+    needs: [smoke]
+    if: success()
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Close any open deploy-failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          for n in $(gh issue list --label deploy-failure --state open --json number --jq '.[].number'); do
+            gh issue close "${n}" --comment "Recovered — deploy succeeded end-to-end. ${RUN_URL}"
+            echo "closed #${n}"
+          done
+
 # Last successful end-to-end run: 2026-04-29 (verification)
