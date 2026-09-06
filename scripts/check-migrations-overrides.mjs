@@ -146,28 +146,72 @@ for (const [pkg, rootRange] of Object.entries(rootOverrides)) {
   }
 }
 
+// ── the prisma pin ─────────────────────────────────────────────────────────
+// Second way these two files drift. Dockerfile.migrations hardcodes the prisma
+// CLI version, and its own comment says it MUST match apps/api because the
+// engine bundled in the CLI has to match the schema the client was generated
+// against. Nothing enforced that, and a Dependabot bump only ever touches
+// package.json — #639 proposes prisma 7.10.0 and would have left the image
+// running the 7.9.1 CLI against a 7.10.0 schema.
+//
+// Checked here rather than in a new script because it is the same failure:
+// a value duplicated between the manifest and the image, with only a comment
+// holding them together.
+const apiPkg = JSON.parse(readFileSync(join(REPO_ROOT, 'apps/api/package.json'), 'utf8'));
+const apiPrisma = (apiPkg.devDependencies ?? {}).prisma;
+const apiClient = (apiPkg.dependencies ?? {})['@prisma/client'];
+const migPrisma = (migManifest.dependencies ?? {}).prisma;
+
+if (apiPrisma && migPrisma && apiPrisma !== migPrisma) {
+  problems.push(
+    `  prisma: apps/api devDependencies pins "${apiPrisma}" but the migrations image pins "${migPrisma}"\n` +
+      `      -> the migration CLI and the generated client would disagree on the engine`,
+  );
+}
+if (apiPrisma && apiClient && apiPrisma !== apiClient) {
+  problems.push(
+    `  prisma: apps/api devDependencies pins "${apiPrisma}" but @prisma/client is "${apiClient}"\n` +
+      `      -> CLI and client must be the same version`,
+  );
+}
+
 const checked = Object.keys(rootOverrides).filter((p) => installed.has(p));
 console.log(`=== migrations-image override drift ===`);
 console.log(`    root overrides:       ${Object.keys(rootOverrides).length}`);
 console.log(`    migrations overrides: ${Object.keys(migOverrides).length}`);
 console.log(`    packages in BOTH the root overrides and the migrations tree: ${checked.length}`);
 if (checked.length) console.log(`      ${checked.join(', ')}`);
+console.log(`    prisma pin: apps/api=${apiPrisma} client=${apiClient} migrations-image=${migPrisma}`);
 
 if (problems.length) {
-  fail(
-    `Override drift between the root package.json and ${DOCKERFILE}:\n\n` +
-      problems.join('\n') +
-      `\n\nWHY THIS BLOCKS THE MERGE\n` +
+  const hasOverrideDrift = problems.some((p) => p.includes('pins NOTHING') || p.includes('(lower)'));
+  const hasPrismaDrift = problems.some((p) => p.trimStart().startsWith('prisma:'));
+
+  let why = `\n\nWHY THIS BLOCKS THE MERGE\n`;
+  if (hasOverrideDrift) {
+    why +=
       `Dockerfile.migrations synthesizes its own package.json and runs\n` +
       `\`npm install\`, not \`npm ci\` against the monorepo lockfile — so the root\n` +
       `\`overrides\` do NOT apply to that image. A transitive CVE patched at the\n` +
       `repo root has to be repeated in the Dockerfile's own overrides block, or\n` +
       `Trivy fails on the migrations image and the deploy gate SKIPS\n` +
       `migrate/deploy/smoke. The PR merges, CI is green, and production silently\n` +
-      `never updates. That is exactly what happened on 2026-09-06.\n\n` +
-      `FIX: add the pins above to the \`overrides\` block in\n` +
-      `apps/api/Dockerfile.migrations.`,
-  );
+      `never updates. That is exactly what happened on 2026-09-06.\n` +
+      `  FIX: add the pins above to the \`overrides\` block in\n` +
+      `       apps/api/Dockerfile.migrations.\n`;
+  }
+  if (hasPrismaDrift) {
+    why +=
+      `The prisma CLI version is duplicated between apps/api/package.json and\n` +
+      `the manifest synthesized in Dockerfile.migrations, and only a comment held\n` +
+      `them together. They must match: the engine bundled in the CLI has to match\n` +
+      `the schema the client was generated against. A dependency bump only ever\n` +
+      `edits package.json, so the image silently keeps running the old CLI.\n` +
+      `  FIX: bump \`"prisma":"…"\` in apps/api/Dockerfile.migrations to the same\n` +
+      `       version, in the SAME pull request.\n`;
+  }
+
+  fail(`Drift between the root/apps/api manifests and ${DOCKERFILE}:\n\n` + problems.join('\n') + why);
 }
 
 console.log(`\n✅ No override drift: every root pin that the migrations image installs is pinned there too.`);
