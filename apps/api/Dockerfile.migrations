@@ -51,6 +51,14 @@ WORKDIR /app
 # picomatch). Without these, Trivy flags 5 HIGH CVEs on this image even
 # though the migrations container only runs `prisma migrate deploy` and
 # never serves traffic. The overrides keep the deploy gate green.
+#
+# NOTE: this manifest is SYNTHESIZED here and installed with `npm install`,
+# NOT `npm ci` against the monorepo lockfile - so the ROOT package.json
+# `overrides` do NOT reach this image. Any transitive CVE fixed at the repo
+# root must be repeated HERE too, or the Trivy gate fails and deploy/migrate/
+# smoke are SKIPPED: the PR merges and production silently never updates.
+# That is exactly how mysql2 GHSA-3f6p-5ww8-9rcr blocked the 2026-09-06
+# rollout after the root override had already patched it everywhere else.
 # Bump these alongside the Prisma version when you upgrade.
 RUN echo '{ \
   "name":"jadwal-migrations", \
@@ -62,7 +70,9 @@ RUN echo '{ \
     "effect":"^3.20.0", \
     "lodash":"^4.18.1", \
     "picomatch":"^4.0.4", \
-    "form-data":"^4.0.6" \
+    "form-data":"^4.0.6", \
+    "mysql2":"^3.22.0", \
+    "fast-uri":"^3.1.7" \
   } \
 }' > package.json
 
