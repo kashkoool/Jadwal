@@ -18,7 +18,7 @@
     "prepare": "git config core.hooksPath scripts/git-hooks 2>/dev/null || true"
   },
   "devDependencies": {
-    "turbo": "2.10.11"
+    "turbo": "2.10.12"
   },
   "overrides": {
     "picomatch": "^4.0.4",
