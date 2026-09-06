@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { isValidDate } from '../bookings/bookings.service';
+import { isValidDate, addMonthsClamped } from '../bookings/bookings.service';
 import type { CreateSpecialPriceDto } from './dto/create-special-price.dto';
 import type { BulkSpecialPriceDto } from './dto/bulk-special-price.dto';
 
@@ -42,8 +42,7 @@ export async function createSpecialPriceCore(
     throw new BadRequestException('Cannot set a special price for a past date');
   }
 
-  const maxAhead = new Date();
-  maxAhead.setMonth(maxAhead.getMonth() + SPECIAL_PRICE_MAX_ADVANCE_MONTHS);
+  const maxAhead = addMonthsClamped(new Date(), SPECIAL_PRICE_MAX_ADVANCE_MONTHS);
   if (dto.date > maxAhead.toISOString().slice(0, 10)) {
     throw new BadRequestException(`Cannot set a special price more than ${SPECIAL_PRICE_MAX_ADVANCE_MONTHS} months ahead`);
   }

@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { isValidDate, buildDatetime, computeSlots } from '../bookings/bookings.service';
+import { isValidDate, buildDatetime, computeSlots, addMonthsClamped } from '../bookings/bookings.service';
 import type { CreateActivityBlockDto } from './dto/create-activity-block.dto';
 
 // How far ahead a block may be set (matches the date picker's range).
@@ -63,8 +63,7 @@ export async function createActivityBlockCore(
   }
 
   // Cap how far ahead a block may be set.
-  const maxAhead = new Date();
-  maxAhead.setMonth(maxAhead.getMonth() + BLOCK_MAX_ADVANCE_MONTHS);
+  const maxAhead = addMonthsClamped(new Date(), BLOCK_MAX_ADVANCE_MONTHS);
   const maxAheadStr = maxAhead.toISOString().slice(0, 10);
   if (dto.date > maxAheadStr || (dto.endDate && dto.endDate > maxAheadStr)) {
     throw new BadRequestException(`Cannot block more than ${BLOCK_MAX_ADVANCE_MONTHS} months ahead`);
@@ -84,8 +83,7 @@ export async function createActivityBlockCore(
     }
     // Cover through the END of the 6-month-out month so the final month's last
     // weekday occurrences are included (not cut at the exact 6-month date).
-    const sixMonthsOut = new Date(rangeStart);
-    sixMonthsOut.setUTCMonth(sixMonthsOut.getUTCMonth() + BLOCK_MAX_ADVANCE_MONTHS);
+    const sixMonthsOut = addMonthsClamped(rangeStart, BLOCK_MAX_ADVANCE_MONTHS);
     const horizonMs = Date.UTC(sixMonthsOut.getUTCFullYear(), sixMonthsOut.getUTCMonth() + 1, 0);
     const existing = await db.activityBlock.findMany({
       where: { activityId: activity.id, deletedAt: null, blockStart: { lt: new Date(horizonMs + DAY_MS) }, blockEnd: { gt: rangeStart } },

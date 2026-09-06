@@ -275,9 +275,12 @@ describe('VendorService.createActivityBlock', () => {
       Math.max(...rows.filter((r: { blockStart: Date }) => r.blockStart.getUTCDay() === wd).map((r: { blockStart: Date }) => r.blockStart.getTime()));
     // Each picked weekday recurs through the END of the 6-month-out month (its
     // last Fri/Sat/Sun of that month), not cut at the exact 6-month date.
-    const sixMo = new Date(fri + 'T00:00:00.000Z');
-    sixMo.setUTCMonth(sixMo.getUTCMonth() + 6);
-    const targetYm = sixMo.getUTCFullYear() * 12 + sixMo.getUTCMonth();
+    // Month index arithmetic, NOT setUTCMonth: setUTCMonth keeps the
+    // day-of-month, so when `fri` lands on a 31st it overflows into the month
+    // AFTER the one we mean (Aug 31 + 6 -> "Feb 31" -> Mar 3) and this
+    // expectation would silently mirror the very bug the code under test had.
+    const friDate = new Date(fri + 'T00:00:00.000Z');
+    const targetYm = friDate.getUTCFullYear() * 12 + friDate.getUTCMonth() + 6;
     for (const wd of [0, 5, 6]) {
       const last = new Date(maxOf(wd));
       expect(last.getUTCFullYear() * 12 + last.getUTCMonth()).toBe(targetYm);

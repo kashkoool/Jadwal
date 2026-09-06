@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { addMonthsClampedLocal } from '@/lib/date-window';
 
 interface DatePickerProps {
   value: string; // "YYYY-MM-DD" or ""
@@ -125,8 +126,7 @@ export default function DatePicker({ value, onChange, placeholder = 'Select date
     tomorrow.setDate(tomorrow.getDate() + 1);
     const nextWeek = new Date(now);
     nextWeek.setDate(nextWeek.getDate() + 7);
-    const nextMonth = new Date(now);
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const nextMonth = addMonthsClampedLocal(now, 1);
     const all = [
       { label: 'Today', dateStr: today },
       { label: 'Tomorrow', dateStr: toYMD(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate()) },

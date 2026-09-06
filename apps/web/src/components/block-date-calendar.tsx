@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Block } from '@/lib/activity-blocks';
+import { addMonthsClampedUTC } from '@/lib/date-window';
 
 const DAY_MS = 86400000;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -69,11 +70,7 @@ export default function BlockDateCalendar({
     return { y: d.getUTCFullYear(), m: d.getUTCMonth() }; // m: 0-11
   });
 
-  const maxStr = useMemo(() => {
-    const d = new Date();
-    d.setUTCMonth(d.getUTCMonth() + maxMonths);
-    return ymd(d);
-  }, [maxMonths]);
+  const maxStr = useMemo(() => ymd(addMonthsClampedUTC(new Date(), maxMonths)), [maxMonths]);
 
   // First/last selectable month bounds (so nav can't run away).
   const minMonth = useMemo(() => {
@@ -81,8 +78,7 @@ export default function BlockDateCalendar({
     return d.getUTCFullYear() * 12 + d.getUTCMonth();
   }, []);
   const maxMonth = useMemo(() => {
-    const d = new Date();
-    d.setUTCMonth(d.getUTCMonth() + maxMonths);
+    const d = addMonthsClampedUTC(new Date(), maxMonths);
     return d.getUTCFullYear() * 12 + d.getUTCMonth();
   }, [maxMonths]);
   const viewMonth = view.y * 12 + view.m;

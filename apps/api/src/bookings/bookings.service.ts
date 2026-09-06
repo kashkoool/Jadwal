@@ -338,6 +338,30 @@ export function buildDatetime(dateStr: string, timeStr: string): Date {
   return new Date(`${dateStr}T${timeStr}:00.000Z`);
 }
 
+/**
+ * Add (or subtract) whole months, CLAMPING to the last day of the target month.
+ *
+ * `setMonth`/`setUTCMonth` keep the day-of-month, so a day that does not exist
+ * in the target month silently rolls FORWARD: 2026-08-31 + 6 months becomes
+ * "2027-02-31", which JS normalises to 2027-03-03. Every advance-window check
+ * built on setMonth was therefore up to 3 days too generous whenever the base
+ * date fell on a 29th, 30th or 31st, and the calendars offered a month the API
+ * then rejected.
+ *
+ * Clamping is the intended reading of "N months ahead": Aug 31 + 6 months is
+ * the end of February, not the start of March. Setting the day to 1 before
+ * shifting the month is what makes the shift itself overflow-proof.
+ */
+export function addMonthsClamped(date: Date, months: number): Date {
+  const day = date.getUTCDate();
+  const out = new Date(date);
+  out.setUTCDate(1);
+  out.setUTCMonth(out.getUTCMonth() + months);
+  const lastDayOfTarget = new Date(Date.UTC(out.getUTCFullYear(), out.getUTCMonth() + 1, 0)).getUTCDate();
+  out.setUTCDate(Math.min(day, lastDayOfTarget));
+  return out;
+}
+
 /** Get ISO weekday name for a YYYY-MM-DD string (MON, TUE, …) */
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 function weekdayOf(dateStr: string): string {
@@ -976,8 +1000,7 @@ export class BookingsService {
     }
 
     // Prevent bookings too far in the future (avoids indefinite seat locks)
-    const maxFutureDate = new Date();
-    maxFutureDate.setMonth(maxFutureDate.getMonth() + this.bookingMaxAdvanceMonths);
+    const maxFutureDate = addMonthsClamped(new Date(), this.bookingMaxAdvanceMonths);
     const maxFutureDateStr = maxFutureDate.toISOString().slice(0, 10);
     if (dto.checkInDate > maxFutureDateStr) {
       throw new BadRequestException(`Cannot book more than ${this.bookingMaxAdvanceMonths} month(s) in advance`);
